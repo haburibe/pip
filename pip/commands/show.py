@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 from email.parser import FeedParser
+import json
 import logging
 import os
 
@@ -27,6 +28,12 @@ class ShowCommand(Command):
             action='store_true',
             default=False,
             help='Show the full list of installed files for each package.')
+        self.cmd_opts.add_option(
+            '--json',
+            dest='json',
+            action='store_true',
+            default=False,
+            help='JSON output.')
 
         self.parser.insert_option_group(0, self.cmd_opts)
 
@@ -37,8 +44,12 @@ class ShowCommand(Command):
         query = args
 
         results = search_packages_info(query)
-        if not print_results(results, options.files):
-            return ERROR
+        if options.json:
+            if not print_results_json(results, options.files):
+                return ERROR
+        else:
+            if not print_results(results, options.files):
+                return ERROR
         return SUCCESS
 
 
@@ -127,4 +138,38 @@ def print_results(distributions, list_all_files):
             logger.info("Entry-points:")
             for line in dist['entry_points']:
                 logger.info("  %s" % line.strip())
+    return results_printed
+
+def print_results_json(distributions, list_all_files):
+    """
+    Print the JSON formatted informations from installed distributions found.
+    """
+    results_printed = False
+    distributions_info = []
+    for dist in distributions:
+        results_printed = True
+        dist_info = {
+            'metadata_version': dist.get('metadata-version'),
+            'name': dist['name'],
+            'version': dist['version'],
+            'summary': dist.get('summary', ''),
+            'home_page': dist.get('home-page', ''),
+            'author': dist.get('author', ''),
+            'author_email': dist.get('author-email', ''),
+            'license': dist.get('license', ''),
+            'location': dist['location'],
+            'requires': dist['requires'],
+        }
+        if list_all_files:
+            if dist['files'] is not None:
+                dist_info['files'] = dist['files']
+            else:
+                # TODO: message or Empty list
+                dist_info['files'] = ['Cannot locate installed-files.txt']
+        if 'entry_points' in dist:
+            dist_info['entry_points'] = '\n'.join([
+                line.strip() for line in dist['entry_points']
+            ])
+        distributions_info.append(dist_info)
+    logger.info(json.dumps(distributions_info, indent=2))
     return results_printed
